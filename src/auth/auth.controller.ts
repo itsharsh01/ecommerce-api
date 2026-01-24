@@ -2,17 +2,21 @@ import {
   Controller,
   Post,
   Body,
-  UseGuards,
-  Get,
-  Request,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
   @IsEmail()
   @IsNotEmpty()
   email: string;
@@ -21,45 +25,27 @@ export class RegisterDto {
   @MinLength(6)
   @IsNotEmpty()
   password: string;
-
-  @IsString()
-  @IsNotEmpty()
-  name: string;
 }
 
-export class VerifyTokenDto {
-  @IsString()
+export class LoginDto {
+  @IsEmail()
   @IsNotEmpty()
-  idToken: string;
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  @IsNotEmpty()
+  password: string;
 }
 
 export class VerifyEmailDto {
-  @IsString()
+  @IsEmail()
   @IsNotEmpty()
-  uid: string;
-}
-
-export class RegisterWithPhoneDto {
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^(\+91|0|91)?[6-9]\d{9}$/, {
-    message:
-      'Phone number must be a valid Indian mobile number (e.g., +918266831757, 8266831757, or 08266831757)',
-  })
-  phoneNumber: string;
+  email: string;
 
   @IsString()
-  name?: string;
-}
-
-export class InitiatePhoneVerificationDto {
-  @IsString()
   @IsNotEmpty()
-  @Matches(/^(\+91|0|91)?[6-9]\d{9}$/, {
-    message:
-      'Phone number must be a valid Indian mobile number (e.g., +918266831757, 8266831757, or 08266831757)',
-  })
-  phoneNumber: string;
+  otp: string;
 }
 
 @Controller('auth')
@@ -70,57 +56,28 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(
+      registerDto.firstName,
+      registerDto.lastName,
       registerDto.email,
       registerDto.password,
-      registerDto.name,
     );
   }
 
-  @Post('verify-token')
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  async verifyToken(@Body() verifyTokenDto: VerifyTokenDto) {
-    return this.authService.verifyFirebaseToken(verifyTokenDto.idToken);
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto.email, loginDto.password);
   }
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
-    return this.authService.verifyEmail(verifyEmailDto.uid);
+    return this.authService.verifyEmail(verifyEmailDto.email, verifyEmailDto.otp);
   }
 
-  @Post('register-phone')
-  @HttpCode(HttpStatus.CREATED)
-  async registerWithPhone(@Body() registerWithPhoneDto: RegisterWithPhoneDto) {
-    return this.authService.registerWithPhone(
-      registerWithPhoneDto.phoneNumber,
-      registerWithPhoneDto.name,
-    );
-  }
-
-  @Post('initiate-phone-verification')
+  @Post('resend-otp')
   @HttpCode(HttpStatus.OK)
-  async initiatePhoneVerification(
-    @Body() initiatePhoneDto: InitiatePhoneVerificationDto,
-  ) {
-    return this.authService.initiatePhoneVerification(initiatePhoneDto.phoneNumber);
-  }
-
-  @Post('verify-phone')
-  @HttpCode(HttpStatus.OK)
-  async verifyPhone(@Body() verifyTokenDto: VerifyTokenDto) {
-    return this.authService.verifyPhoneNumber(verifyTokenDto.idToken);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('profile')
-  getProfile(@Request() req) {
-    return req.user;
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  getCurrentUser(@Request() req) {
-    return req.user;
+  async resendOTP(@Body() body: { email: string }) {
+    return this.authService.resendVerificationOTP(body.email);
   }
 }
-

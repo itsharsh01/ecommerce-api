@@ -1,231 +1,232 @@
 import {
   Injectable,
-  UnauthorizedException,
   ConflictException,
+  UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { FirebaseService } from '../firebase/firebase.service';
-import {
-  formatPhoneToE164,
-  validateE164Format,
-  validateIndianPhone,
-} from '../common/utils/phone.util';
+import * as bcrypt from 'bcrypt';
+import { User } from '../entities/user.entity';
+import { Otp } from '../entities/otp.entity';
+import { EmailService } from '../common/services/email.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private firebaseService: FirebaseService,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Otp)
+    private otpRepository: Repository<Otp>,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
-  // Register with email and password
-  async register(email: string, password: string, name: string) {
-    // Check if user exists in Firebase
-    const existingFirebaseUser = await this.firebaseService.getUserByEmail(email);
-    if (existingFirebaseUser) {
+  /**
+   * Generate a random 6-digit OTP
+   */
+  private generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  async register(
+    firstName: string,
+    lastName: string,
+    email: string,
+    password: string,
+  ) {
+    // Check if user exists in database
+    const existingUser = await this.userRepository.findOne({
+      where: { email },
+    });
+
+    if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Create user in Firebase
-    const firebaseUser = await this.firebaseService.createUser(
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user in database (email not verified yet)
+    const user = await this.userRepository.save({
+      firstName,
+      lastName,
       email,
-      password,
-      name,
-    );
+      password: hashedPassword,
+      emailVerified: false,
+    });
+
+    // Generate OTP
+    const otp = this.generateOTP();
+
+    // Delete any existing OTPs for this email
+    await this.otpRepository.delete({ email, isUsed: false });
+
+    // Save OTP to database
+    await this.otpRepository.save({
+      email,
+      otp,
+      isUsed: false,
+    });
+
+    // Send verification email
+    await this.emailService.sendVerificationOTP(email, otp, firstName);
+
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
 
     return {
-      message: 'User created successfully. Please verify your email.',
-      user: {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        name: firebaseUser.displayName || name,
-        emailVerified: firebaseUser.emailVerified,
+      msg: 'Registration successful. Please check your email for verification OTP.',
+      data: {
+        user: userWithoutPassword,
       },
-      // Note: Email verification should be handled on client side using Firebase Client SDK
-      // The client will call sendEmailVerification() and then send the ID token back
     };
   }
 
-  // Verify Firebase token (when user logs in from client)
-  async verifyFirebaseToken(idToken: string) {
-    try {
-      const decodedToken = await this.firebaseService.verifyToken(idToken);
+  /**
+   * Verify email with OTP
+   */
+  async verifyEmail(email: string, otp: string) {
+    // Find the OTP record
+    const otpRecord = await this.otpRepository.findOne({
+      where: { email, otp, isUsed: false },
+      order: { createdAt: 'DESC' },
+    });
 
-      // Generate JWT token for your API
-      const payload = {
-        sub: decodedToken.uid,
-        email: decodedToken.email,
-        name: decodedToken.name,
-        firebaseUid: decodedToken.uid,
-        emailVerified: decodedToken.email_verified,
-      };
-
-      return {
-        access_token: this.jwtService.sign(payload),
-        user: {
-          uid: decodedToken.uid,
-          email: decodedToken.email,
-          name: decodedToken.name,
-          emailVerified: decodedToken.email_verified,
-        },
-      };
-    } catch (error) {
-      throw new UnauthorizedException('Invalid Firebase token');
-    }
-  }
-
-  // Verify email (called after user clicks verification link on client)
-  async verifyEmail(uid: string) {
-    try {
-      await this.firebaseService.updateEmailVerified(uid, true);
-      return { message: 'Email verified successfully' };
-    } catch (error) {
-      throw new BadRequestException('Failed to verify email');
-    }
-  }
-
-  // Register with phone number
-  // Note: OTP sending is handled by Firebase Client SDK on the frontend
-  // This method prepares the backend for phone authentication
-  async registerWithPhone(phoneNumber: string, name?: string) {
-    // Format phone number to E.164 format (e.g., +918266831757)
-    const formattedPhone = formatPhoneToE164(phoneNumber, '+91');
-
-    // Validate E.164 format
-    if (!validateE164Format(formattedPhone)) {
-      throw new BadRequestException(
-        'Invalid phone number format. Must be in E.164 format (e.g., +918266831757)',
-      );
+    if (!otpRecord) {
+      throw new BadRequestException('Invalid OTP');
     }
 
-    // Validate Indian phone number format (optional - remove if supporting multiple countries)
-    if (!validateIndianPhone(formattedPhone)) {
-      throw new BadRequestException(
-        'Invalid Indian phone number. Must be in format +91 followed by 10 digits starting with 6-9 (e.g., +918266831757)',
-      );
+    // Check if OTP is expired (10 minutes)
+    const now = new Date();
+    const createdAt = new Date(otpRecord.createdAt);
+    const diffInMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+
+    if (diffInMinutes > 10) {
+      // Mark as used even though expired
+      otpRecord.isUsed = true;
+      await this.otpRepository.save(otpRecord);
+      throw new BadRequestException('OTP has expired. Please request a new one.');
     }
 
-    // Check if user exists with this phone number
-    const existingUser = await this.firebaseService.getUserByPhoneNumber(formattedPhone);
-    if (existingUser) {
-      throw new ConflictException('User with this phone number already exists');
+    // Mark OTP as used
+    otpRecord.isUsed = true;
+    await this.otpRepository.save(otpRecord);
+
+    // Update user email verification status
+    const user = await this.userRepository.findOne({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
     }
 
-    // Create user with phone number
-    // Note: Phone verification OTP is sent by Firebase Client SDK, not Admin SDK
-    const firebaseUser = await this.firebaseService.createUserWithPhone(
-      formattedPhone,
-      name,
-    );
+    user.emailVerified = true;
+    await this.userRepository.save(user);
+
+    // Generate JWT token with user id and email
+    const payload = {
+      sub: user.id,
+      email: user.email,
+    };
+
+    const access_token = this.jwtService.sign(payload);
+
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
 
     return {
-      message:
-        'User created successfully. Please verify your phone number using OTP sent to your mobile.',
-      user: {
-        uid: firebaseUser.uid,
-        phoneNumber: firebaseUser.phoneNumber,
-        name: firebaseUser.displayName || name,
-        phoneVerified: firebaseUser.phoneNumber ? true : false,
+      msg: 'Email verified successfully',
+      data: {
+        access_token,
+        user: userWithoutPassword,
       },
-      // Instructions for client:
-      // 1. Use Firebase Client SDK: signInWithPhoneNumber(phoneNumber, recaptchaVerifier)
-      // 2. Firebase will send OTP SMS to the phone number
-      // 3. User enters OTP
-      // 4. Call confirmationResult.confirm(code)
-      // 5. Get ID token and send to /auth/verify-phone endpoint
     };
   }
 
-  // For phone number authentication with OTP
-  // Note: Phone auth with OTP is handled on the client side using Firebase Client SDK
-  // The client:
-  // 1. Calls signInWithPhoneNumber() which sends OTP via SMS
-  // 2. User enters OTP
-  // 3. Calls confirmationResult.confirm(code)
-  // 4. Gets ID token and sends it here for verification
-  async verifyPhoneNumber(idToken: string) {
-    try {
-      // Verify the Firebase ID token from client
-      const decodedToken = await this.firebaseService.verifyToken(idToken);
+  async login(email: string, password: string) {
+    // Find user by email
+    const user = await this.userRepository.findOne({
+      where: { email },
+    });
 
-      // Extract phone number from token
-      const phoneNumber = decodedToken.phone_number;
-      if (!phoneNumber) {
-        throw new BadRequestException('Phone number not found in token');
-      }
-
-      // Generate JWT token for your API
-      const payload = {
-        sub: decodedToken.uid,
-        phoneNumber: phoneNumber,
-        firebaseUid: decodedToken.uid,
-        phoneVerified: true,
-      };
-
-      return {
-        access_token: this.jwtService.sign(payload),
-        user: {
-          uid: decodedToken.uid,
-          phoneNumber: phoneNumber,
-          phoneVerified: true,
-        },
-        message: 'Phone number verified successfully',
-      };
-    } catch (error) {
-      throw new UnauthorizedException('Invalid Firebase token or phone verification failed');
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
     }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Check if email is verified
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email before logging in');
+    }
+
+    // Generate JWT token with user id and email
+    const payload = {
+      sub: user.id,
+      email: user.email,
+    };
+
+    const access_token = this.jwtService.sign(payload);
+
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
+
+    return {
+      msg: 'Login successful',
+      data: {
+        access_token,
+        user: userWithoutPassword,
+      },
+    };
   }
 
-  // Send OTP for phone verification (prepares for client-side Firebase phone auth)
-  // Note: This is a helper endpoint. Actual OTP sending is done by Firebase Client SDK
-  async initiatePhoneVerification(phoneNumber: string) {
-    // Format phone number to E.164 format (e.g., +918266831757)
-    const formattedPhone = formatPhoneToE164(phoneNumber, '+91');
-
-    // Validate E.164 format
-    if (!validateE164Format(formattedPhone)) {
-      throw new BadRequestException(
-        'Invalid phone number format. Must be in E.164 format (e.g., +918266831757)',
-      );
-    }
-
-    // Validate Indian phone number format (optional - remove if supporting multiple countries)
-    if (!validateIndianPhone(formattedPhone)) {
-      throw new BadRequestException(
-        'Invalid Indian phone number. Must be in format +91 followed by 10 digits starting with 6-9 (e.g., +918266831757)',
-      );
-    }
-
+  /**
+   * Resend verification OTP
+   */
+  async resendVerificationOTP(email: string) {
     // Check if user exists
-    const existingUser = await this.firebaseService.getUserByPhoneNumber(formattedPhone);
+    const user = await this.userRepository.findOne({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (user.emailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    // Generate new OTP
+    const otp = this.generateOTP();
+
+    // Delete any existing unused OTPs for this email
+    await this.otpRepository.delete({ email, isUsed: false });
+
+    // Save new OTP to database
+    await this.otpRepository.save({
+      email,
+      otp,
+      isUsed: false,
+    });
+
+    // Send verification email
+    await this.emailService.sendVerificationOTP(email, otp, user.firstName);
 
     return {
-      message:
-        'Use Firebase Client SDK to send OTP. Instructions: Use signInWithPhoneNumber(phoneNumber, recaptchaVerifier)',
-      phoneNumber: formattedPhone,
-      userExists: !!existingUser,
-      instructions: {
-        step1: 'Initialize Firebase Client SDK',
-        step2: 'Initialize RecaptchaVerifier',
-        step3: 'Call signInWithPhoneNumber(phoneNumber, recaptchaVerifier)',
-        step4: 'Firebase will send OTP SMS automatically',
-        step5: 'User enters OTP',
-        step6: 'Call confirmationResult.confirm(code)',
-        step7: 'Get ID token and send to /auth/verify-phone',
+      msg: 'Verification OTP has been resent to your email',
+      data: {
+        email,
+        expiresIn: '10 minutes',
       },
-      // In production, you might want to check rate limits, etc.
     };
-  }
-
-  // Validate JWT token (for protected routes)
-  async validateJwtToken(token: string) {
-    try {
-      const payload = this.jwtService.verify(token);
-      return payload;
-    } catch (error) {
-      throw new UnauthorizedException('Invalid JWT token');
-    }
   }
 }
-

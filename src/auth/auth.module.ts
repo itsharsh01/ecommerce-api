@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { FirebaseModule } from '../firebase/firebase.module';
-
+import { User } from '../entities/user.entity';
+import { Otp } from '../entities/otp.entity';
+import { EmailService } from '../common/services/email.service';
 
 @Module({
   imports: [
-    FirebaseModule,
+    TypeOrmModule.forFeature([User, Otp]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -21,7 +23,7 @@ import { FirebaseModule } from '../firebase/firebase.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, EmailService],
   exports: [AuthService],
 })
 export class AuthModule {}

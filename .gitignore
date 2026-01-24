@@ -1,6 +1,5 @@
 node_modules
-firebase.json
-# .env
+.env
 .env.local
 .env.*.local
 dist
