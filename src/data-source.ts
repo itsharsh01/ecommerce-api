@@ -4,6 +4,9 @@ import * as path from 'path';
 // Import all entities - add new entities here when you create them
 import { User } from './entities/user.entity';
 import { Otp } from './entities/otp.entity';
+import { Category } from './entities/category.entity';
+import { SubCategory } from './entities/sub-category.entity';
+import { Brand } from './entities/brand.entity';
 // import { Product } from './entities/product.entity';
 // import { Order } from './entities/order.entity';
 
@@ -18,6 +21,9 @@ export default new DataSource({
   entities: [
     User,
     Otp,
+    Category,
+    SubCategory,
+    Brand,
     // Product,
     // Order,
   ],

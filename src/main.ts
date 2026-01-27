@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/utils/interceptor/response.interceptor';
+import { RequestLoggerInterceptor } from './common/utils/logger/request-logger.interceptor';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
@@ -35,7 +36,10 @@ app.enableCors({
       transform: true,
     }),
   );
-     app.useGlobalInterceptors(new ResponseInterceptor());
+     app.useGlobalInterceptors(
+       new RequestLoggerInterceptor(),
+       new ResponseInterceptor(),
+     );
 
      // Swagger configuration
   const config = new DocumentBuilder()

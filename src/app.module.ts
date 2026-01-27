@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { CategoryModule } from './categories/category.module';
+import { BrandModule } from './brands/brand.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
@@ -17,7 +19,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
   inject: [ConfigService],
   useFactory: (configService: ConfigService) => {
     const databaseUrl = configService.get<string>('DATABASE_URL');
-    
+
     return {
       type: 'postgres',
       url: databaseUrl,
@@ -46,14 +48,16 @@ import { DataSource, DataSourceOptions } from 'typeorm';
   dataSourceFactory: async (options: DataSourceOptions) => {
     const dataSource = new DataSource(options);
     await dataSource.initialize();
-    
+
     // Set timezone for all connections in the pool
     await dataSource.query("SET timezone = 'Asia/Kolkata'");
-    
+
     return dataSource;
   },
   }),
     AuthModule,
+    CategoryModule,
+    BrandModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -64,7 +68,7 @@ export class AppModule implements OnModuleInit {
   async onModuleInit() {
     if (this.dataSource.isInitialized) {
       console.log('✅ Database connected successfully');
-      
+
       // Set timezone for all connections
       try {
         await this.dataSource.query("SET timezone = 'Asia/Kolkata'");
