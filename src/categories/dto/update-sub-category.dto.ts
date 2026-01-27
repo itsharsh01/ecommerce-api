@@ -18,7 +18,7 @@ export class UpdateSubCategoryDto {
   })
   @IsUUID()
   @IsOptional()
-  categoryId?: string;
+  category_id?: string;
 
   @ApiProperty({
     description: 'URL-friendly slug',

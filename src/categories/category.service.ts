@@ -249,7 +249,7 @@ export class CategoryService {
 
     // Check if slug already exists for this category
     const existingSubCategory = await this.subCategoryRepository.findOne({
-      where: { slug, categoryId: createSubCategoryDto.categoryId },
+      where: { slug, categoryId: createSubCategoryDto.categoryId } as any,
       withDeleted: true,
     });
 
@@ -361,16 +361,16 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
     }
 
     // Handle categoryId update
-    if (updateSubCategoryDto.categoryId) {
+    if (updateSubCategoryDto.category_id) {
       const category = await this.categoryRepository.findOne({
-        where: { id: updateSubCategoryDto.categoryId },
+        where: { id: updateSubCategoryDto.category_id },
       });
 
       if (!category) {
         throw new NotFoundException('Category not found');
       }
 
-      subCategory.categoryId = updateSubCategoryDto.categoryId;
+      subCategory.category_id = updateSubCategoryDto.category_id;
     }
 
     // Handle slug update
@@ -383,9 +383,9 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
 
       // Check if new slug conflicts with existing in the same category
       if (newSlug !== subCategory.slug) {
-        const categoryId = updateSubCategoryDto.categoryId || subCategory.categoryId;
+        const categoryId = updateSubCategoryDto.category_id || subCategory.category_id;
         const existing = await this.subCategoryRepository.findOne({
-          where: { slug: newSlug, categoryId },
+          where: { slug: newSlug, category_id: categoryId },
           withDeleted: true,
         });
 
@@ -412,7 +412,7 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
 
     // Load category relation
     const category = await this.categoryRepository.findOne({
-      where: { id: updatedSubCategory.categoryId },
+      where: { id: updatedSubCategory.category_id },
     });
 
     if (category) {

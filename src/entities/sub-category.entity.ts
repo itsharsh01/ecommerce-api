@@ -8,11 +8,13 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
 import { Category } from './category.entity';
+import { Product } from './product.entity';
 
 @Entity('sub_categories')
-@Index(['categoryId', 'slug']) // Composite index for unique slug per category
+@Index(['category_id', 'slug']) // Composite index for unique slug per category
 export class SubCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -24,7 +26,7 @@ export class SubCategory {
   slug: string;
 
   @Column({ type: 'uuid' })
-  categoryId: string;
+  category_id: string;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
@@ -40,7 +42,12 @@ export class SubCategory {
 
   @ManyToOne(() => Category, (category) => category.subCategories, {
     onDelete: 'CASCADE',
+     eager: false
   })
-  @JoinColumn({ name: 'categoryId' })
+  @JoinColumn({ name: 'category_id' })
   category: Category;
+
+  @OneToMany(() => Product, (product) => product.subCategory)
+products: Product[];
+
 }

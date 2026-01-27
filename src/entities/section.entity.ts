@@ -4,35 +4,30 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  DeleteDateColumn,
   OneToMany,
 } from 'typeorm';
-import { Product } from './product.entity';
+import { SectionItem } from './section-item.entity';
 
-@Entity('brands')
-export class Brand {
+@Entity('sections')
+export class Section {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
+  @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
-  slug: string;
+  @Column({ type: 'varchar', length: 100, unique: true })
+  key: string;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @OneToMany(() => SectionItem, (item) => item.section, { eager: false })
+  items: SectionItem[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
-
-  @DeleteDateColumn({ type: 'timestamptz' })
-  deletedAt: Date;
-
-  @OneToMany(() => Product, (product) => product.brand)
-products: Product[];
-
 }

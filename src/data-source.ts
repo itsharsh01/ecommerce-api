@@ -7,7 +7,11 @@ import { Otp } from './entities/otp.entity';
 import { Category } from './entities/category.entity';
 import { SubCategory } from './entities/sub-category.entity';
 import { Brand } from './entities/brand.entity';
-// import { Product } from './entities/product.entity';
+import { Product } from './entities/product.entity';
+import { ProductVariant } from './entities/product-variant.entity';
+import { Section } from './entities/section.entity';
+import { SectionItem } from './entities/section-item.entity';
+import { Image } from './entities/image.entity';
 // import { Order } from './entities/order.entity';
 
 // Load environment variables
@@ -24,7 +28,11 @@ export default new DataSource({
     Category,
     SubCategory,
     Brand,
-    // Product,
+    Product,
+    ProductVariant,
+    Section,
+    SectionItem,
+    Image,
     // Order,
   ],
   migrations: [path.join(__dirname, 'migrations', '*.{ts,js}')],

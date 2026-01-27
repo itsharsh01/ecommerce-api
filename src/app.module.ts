@@ -5,6 +5,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CategoryModule } from './categories/category.module';
 import { BrandModule } from './brands/brand.module';
+import { ProductModule } from './products/product.module';
+import { SectionModule } from './sections/section.module';
+import { ImageModule } from './images/image.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
@@ -58,6 +61,9 @@ import { DataSource, DataSourceOptions } from 'typeorm';
     AuthModule,
     CategoryModule,
     BrandModule,
+    ProductModule,
+    SectionModule,
+    ImageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
