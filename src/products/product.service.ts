@@ -84,6 +84,7 @@ export class ProductService {
         sub_category_id: createProductDto.subCategoryId,
         status: ProductStatus.DRAFT,
         createdBy: userId,
+        seller_id: userId, // Set seller_id to the user creating the product
       });
 
       const savedProduct = await this.productRepository.save(product);

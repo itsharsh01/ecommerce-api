@@ -12,6 +12,7 @@ import {
 import { ProductVariant } from './product-variant.entity';
 import { Brand } from './brand.entity';
 import { SubCategory } from './sub-category.entity';
+import { User } from './user.entity';
 
 export enum ProductStatus {
   DRAFT = 'draft',
@@ -49,6 +50,9 @@ export class Product {
   @Column({ type: 'uuid' })
   createdBy: string;
 
+  @Column({ type: 'uuid' })
+  seller_id: string;
+
   @OneToMany(() => ProductVariant, (variant) => variant.product, {eager: false })
   variants: ProductVariant[];
 
@@ -61,7 +65,6 @@ export class Product {
   @DeleteDateColumn({ type: 'timestamptz' })
   deletedAt: Date;
 
-
   // 🔹 Product → Brand (Many products can belong to one brand)
   @ManyToOne(() => Brand, { eager: false })
   @JoinColumn({ name: 'brand_id' })
@@ -71,4 +74,9 @@ export class Product {
   @ManyToOne(() => SubCategory, { eager: false })
   @JoinColumn({ name: 'sub_category_id' })
   subCategory: SubCategory;
+
+  // 🔹 Product → User/Seller (Many products can belong to one seller)
+  @ManyToOne(() => User, (user) => user.products, { eager: false })
+  @JoinColumn({ name: 'seller_id' })
+  seller: User;
 }

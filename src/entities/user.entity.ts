@@ -4,7 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Product } from './product.entity';
 
 @Entity('users')
 export class User {
@@ -31,5 +33,9 @@ export class User {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
+
+  // 🔹 User/Seller → Products (One seller can have many products)
+  @OneToMany(() => Product, (product) => product.seller, { eager: false })
+  products: Product[];
 }
 
