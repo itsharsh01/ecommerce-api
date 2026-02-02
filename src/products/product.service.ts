@@ -7,18 +7,25 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository, ILike, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { IsNull, Repository, ILike, MoreThanOrEqual, LessThanOrEqual, DataSource } from 'typeorm';
 import { Product, ProductStatus } from '../entities/product.entity';
+import { ProductVariant } from '../entities/product-variant.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { QueryProductDto } from './dto/query-product.dto';
+import { ImageService } from '../images/image.service';
+import { ModuleType, ImageType } from '../entities/image.entity';
 
 @Injectable()
 export class ProductService {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(ProductVariant)
+    private variantRepository: Repository<ProductVariant>,
+    private imageService: ImageService,
+    private dataSource: DataSource,
   ) {}
 
   /**
@@ -102,111 +109,269 @@ export class ProductService {
     }
   }
 
-  async findAll(queryDto: QueryProductDto, isAdmin: boolean = false) {
-    try {
-      const page = queryDto.page ? Number(queryDto.page) : 1;
-      const limit = queryDto.limit ? Number(queryDto.limit) : 10;
-      const skip = (page - 1) * limit;
+async findAll(queryDto: QueryProductDto, isAdmin = false) {
+    const page = Number(queryDto.page) || 1;
+    const limit = Number(queryDto.limit) || 10;
+    const skip = (page - 1) * limit;
 
-      const queryBuilder = this.productRepository
-        .createQueryBuilder('product')
-        .leftJoinAndSelect('product.variants', 'variant', 'variant.deletedAt IS NULL')
-        .where('product.deletedAt IS NULL');
+    /* --------------------------------
+     * 1️⃣ Base Product Query (LIGHT)
+     * -------------------------------- */
+    const baseQB = this.productRepository
+      .createQueryBuilder('product')
+      .where('product.deletedAt IS NULL');
 
-      // Public listing: only active products
-      if (!isAdmin) {
-        queryBuilder.andWhere('product.status = :status', {
-          status: ProductStatus.ACTIVE,
-        });
-      }
-
-      // Search by name
-      if (queryDto.search) {
-        queryBuilder.andWhere('product.name ILIKE :search', {
-          search: `%${queryDto.search}%`,
-        });
-      }
-
-      // Filter by brandId
-      if (queryDto.brandId) {
-        queryBuilder.andWhere('product.brand_id = :brandId', {
-          brandId: queryDto.brandId,
-        });
-      }
-
-      // Filter by subCategoryId
-      if (queryDto.subCategoryId) {
-        queryBuilder.andWhere('product.sub_category_id = :subCategoryId', {
-          subCategoryId: queryDto.subCategoryId,
-        });
-      }
-
-      // Price filter (using variants) - filter products that have variants in price range
-      if (queryDto.minPrice !== undefined || queryDto.maxPrice !== undefined) {
-        // Use EXISTS subquery to check if product has any variant in price range
-        const subQuery = this.productRepository
-          .createQueryBuilder('p2')
-          .innerJoin('p2.variants', 'v2', 'v2.deletedAt IS NULL')
-          .where('p2.id = product.id');
-
-        if (queryDto.minPrice !== undefined) {
-          subQuery.andWhere('v2.price >= :minPrice');
-          queryBuilder.setParameter('minPrice', queryDto.minPrice);
-        }
-        if (queryDto.maxPrice !== undefined) {
-          subQuery.andWhere('v2.price <= :maxPrice');
-          queryBuilder.setParameter('maxPrice', queryDto.maxPrice);
-        }
-
-        queryBuilder.andWhere(`EXISTS (${subQuery.getQuery()})`);
-      }
-
-      // Get total count
-      const total = await queryBuilder.getCount();
-
-      // Apply pagination
-      const products = await queryBuilder
-        .orderBy('product.createdAt', 'DESC')
-        .skip(skip)
-        .take(limit)
-        .getMany();
-
-      // If pagination is requested, return paginated response
-      if (queryDto.page && queryDto.limit) {
-        return {
-          data: products,
-          pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-            hasNextPage: page < Math.ceil(total / limit),
-            hasPreviousPage: page > 1,
-          },
-        };
-      }
-
-      // Otherwise return all results
-      return products;
-    } catch (err) {
-      throw new InternalServerErrorException(
-        err.message || 'Failed to fetch products',
-      );
+    if (!isAdmin) {
+      baseQB.andWhere('product.status = :status', {
+        status: ProductStatus.ACTIVE,
+      });
     }
-  }
+
+    if (queryDto.search) {
+      baseQB.andWhere('product.name ILIKE :search', {
+        search: `%${queryDto.search}%`,
+      });
+    }
+
+    if (queryDto.brandId) {
+      baseQB.andWhere('product.brand_id = :brandId', {
+        brandId: queryDto.brandId,
+      });
+    }
+
+    if (queryDto.subCategoryId) {
+      baseQB.andWhere('product.sub_category_id = :subCategoryId', {
+        subCategoryId: queryDto.subCategoryId,
+      });
+    }
+
+    /* --------------------------------
+     * 2️⃣ Price Filter (EXISTS — FAST)
+     * -------------------------------- */
+    if (queryDto.minPrice !== undefined || queryDto.maxPrice !== undefined) {
+      const priceSubQuery = this.productRepository
+        .createQueryBuilder('p2')
+        .select('1')
+        .innerJoin('p2.variants', 'v2', 'v2.deletedAt IS NULL')
+        .where('p2.id = product.id');
+
+      if (queryDto.minPrice !== undefined) {
+        priceSubQuery.andWhere('v2.price >= :minPrice');
+        baseQB.setParameter('minPrice', queryDto.minPrice);
+      }
+
+      if (queryDto.maxPrice !== undefined) {
+        priceSubQuery.andWhere('v2.price <= :maxPrice');
+        baseQB.setParameter('maxPrice', queryDto.maxPrice);
+      }
+
+      baseQB.andWhere(`EXISTS (${priceSubQuery.getQuery()})`);
+    }
+
+    /* --------------------------------
+     * 3️⃣ Total Count (NO JOINS)
+     * -------------------------------- */
+    const total = await baseQB.getCount();
+
+    /* --------------------------------
+     * 4️⃣ Paginated Products
+     * -------------------------------- */
+    const products = await baseQB
+      .orderBy('product.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    if (!products.length) {
+      return {
+        data: [],
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+      };
+    }
+
+    const productIds = products.map((p) => p.id);
+
+    /* --------------------------------
+     * 5️⃣ Fetch ACTIVE Variants (Default First)
+     * -------------------------------- */
+    const variants = await this.variantRepository
+      .createQueryBuilder('variant')
+      .where('variant.product_id IN (:...productIds)', { productIds })
+      .andWhere('variant.deletedAt IS NULL')
+      .andWhere('variant.isActive = true')
+      .orderBy('variant.isDefault', 'DESC')
+      .getMany();
+
+    const variantMap = new Map<string, any>();
+    for (const v of variants) {
+      if (!variantMap.has(v.product_id)) {
+        variantMap.set(v.product_id, v);
+      }
+    }
+
+    const variantIds = [...variantMap.values()].map((v) => v.id);
+
+    /* --------------------------------
+     * 6️⃣ Fetch Primary Images (ONE QUERY)
+     * -------------------------------- */
+    const images = await this.dataSource.query(
+      `
+      SELECT id, url, "moduleType", "module_id"
+      FROM images
+      WHERE
+        (
+          ("moduleType" = 'product' AND "module_id" = ANY($1::uuid[]))
+          OR
+          ("moduleType" = 'variant' AND "module_id" = ANY($2::uuid[]))
+        )
+        AND type = 'primary'
+        AND "deletedAt" IS NULL
+      `,
+      [productIds, variantIds],
+    );
+
+    const productImageMap = new Map<string, string>();
+    const variantImageMap = new Map<string, string>();
+
+    images.forEach((img: any) => {
+      if (img.moduleType === 'product') {
+        productImageMap.set(img.module_id, img.url);
+      } else {
+        variantImageMap.set(img.module_id, img.url);
+      }
+    });
+
+    /* --------------------------------
+     * 7️⃣ Final Response Mapping
+     * -------------------------------- */
+    const data = products.map((product) => {
+      const variant = variantMap.get(product.id);
+
+      return {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        description: product.description,
+        coverImage:
+          productImageMap.get(product.id) ||
+          (variant ? variantImageMap.get(variant.id) : null),
+        price: variant?.price ?? null,
+        mrp: variant?.mrp ?? null,
+        brand_id: product.brand_id,
+        sub_category_id: product.sub_category_id,
+        status: product.status,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+      };
+    });
+
+    /* --------------------------------
+     * 8️⃣ Pagination Response
+     * -------------------------------- */
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1,
+      },
+    };
+
+}
+
 
   async findOne(id: string) {
     try {
       const product = await this.productRepository.findOne({
         where: { id, deletedAt: IsNull() },
-        relations: ['variants'],
+        relations: ['variants', 'brand', 'subCategory'],
       });
 
       if (!product) {
         throw new NotFoundException('Product not found');
       }
 
-      return product;
+      // Filter out deleted variants
+      const activeVariants = product.variants?.filter(
+        (v) => !v.deletedAt,
+      ) || [];
+
+      // Get default variant (variant with isDefault=true, or first active variant)
+      const defaultVariant =
+        activeVariants.find((v) => v.isDefault && v.isActive) ||
+        activeVariants.find((v) => v.isActive) ||
+        activeVariants[0];
+
+      // Fetch all images in one query
+      const variantIds = activeVariants.map((v) => v.id);
+      const imagesQuery = `
+        SELECT
+          id, url, "moduleType", "module_id", type
+        FROM images
+        WHERE
+          (
+            ("moduleType" = 'product' AND "module_id" = $1::uuid)
+            OR
+            ("moduleType" = 'variant' AND "module_id" = ANY($2::uuid[]))
+          )
+          AND "deletedAt" IS NULL
+        ORDER BY "createdAt" ASC
+      `;
+      const images = await this.dataSource.query(imagesQuery, [id, variantIds]);
+
+      // Organize images by module_id and type
+      const productImages: any[] = [];
+      const variantImagesMap = new Map<string, any[]>();
+
+      images.forEach((img: any) => {
+        if (img.moduleType === 'product') {
+          productImages.push({
+            id: img.id,
+            url: img.url,
+            type: img.type,
+          });
+        } else if (img.moduleType === 'variant') {
+          if (!variantImagesMap.has(img.module_id)) {
+            variantImagesMap.set(img.module_id, []);
+          }
+          variantImagesMap.get(img.module_id)!.push({
+            id: img.id,
+            url: img.url,
+            type: img.type,
+          });
+        }
+      });
+
+      // Map variants with images
+      const variantsWithImages = activeVariants.map((variant) => ({
+        ...variant,
+        images: variantImagesMap.get(variant.id) || [],
+      }));
+
+      // Get default variant with images
+      const defaultVariantWithImages = defaultVariant
+        ? {
+            ...defaultVariant,
+            images: variantImagesMap.get(defaultVariant.id) || [],
+          }
+        : null;
+
+      return {
+        ...product,
+        images: productImages,
+        defaultVariant: defaultVariantWithImages,
+        variants: variantsWithImages,
+      };
     } catch (err) {
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(

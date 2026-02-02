@@ -8,10 +8,12 @@ import { ProductController } from './product.controller';
 import { VariantController } from './variant.controller';
 import { Product } from '../entities/product.entity';
 import { ProductVariant } from '../entities/product-variant.entity';
+import { ImageModule } from '../images/image.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product, ProductVariant]),
+    ImageModule, // Import ImageModule to use ImageService
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
