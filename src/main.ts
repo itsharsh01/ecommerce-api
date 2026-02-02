@@ -6,7 +6,9 @@ import { RequestLoggerInterceptor } from './common/utils/logger/request-logger.i
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+  });
   const allowedOrigins = [
   'http://localhost:5000',
   'http://localhost:5001',

@@ -25,7 +25,7 @@ export class CreateProductDto {
     description: 'Brand ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  @IsUUID('4', { message: 'brandId must be a valid UUID' })
+  // @IsUUID('4', { message: 'brandId must be a valid UUID' })
   @IsNotEmpty({ message: 'brandId is required' })
   brandId: string;
 
@@ -33,7 +33,7 @@ export class CreateProductDto {
     description: 'SubCategory ID (UUID)',
     example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  @IsUUID('4', { message: 'subCategoryId must be a valid UUID' })
+  // @IsUUID('4', { message: 'subCategoryId must be a valid UUID' })
   @IsNotEmpty({ message: 'subCategoryId is required' })
   subCategoryId: string;
 }

@@ -97,7 +97,7 @@ export class SectionItemService {
         variant_id: createItemDto.variantId || null,
         sortOrder: createItemDto.sortOrder ?? 0,
         isActive: createItemDto.isActive ?? true,
-      });
+      } as Partial<SectionItem>);
 
       const savedItem = await this.sectionItemRepository.save(item);
 

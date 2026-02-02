@@ -1,14 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsUUID, IsNotEmpty } from 'class-validator';
+import { IsEnum, IsUUID, IsNotEmpty, IsOptional } from 'class-validator';
 import { ModuleType, ImageType } from '../../entities/image.entity';
 
 export class UploadImageDto {
   @ApiProperty({
     type: 'string',
     format: 'binary',
-    description: 'Image file (JPEG, PNG, GIF, WebP)',
+    description: 'Image file (JPEG, PNG, GIF, WebP) - handled separately by FileInterceptor',
+    required: false,
   })
-  file: any;
+  @IsOptional()
+  file?: any;
 
   @ApiProperty({
     description: 'Module type that owns this image',

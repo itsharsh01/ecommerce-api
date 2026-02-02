@@ -249,7 +249,7 @@ export class CategoryService {
 
     // Check if slug already exists for this category
     const existingSubCategory = await this.subCategoryRepository.findOne({
-      where: { slug, categoryId: createSubCategoryDto.categoryId } as any,
+      where: { slug, category_id: createSubCategoryDto.categoryId } as any,
       withDeleted: true,
     });
 
@@ -262,9 +262,9 @@ export class CategoryService {
     const subCategory = await this.subCategoryRepository.save({
       name: createSubCategoryDto.name,
       slug,
-      categoryId: createSubCategoryDto.categoryId,
+      category_id: createSubCategoryDto.categoryId,
       isActive: createSubCategoryDto.isActive ?? true,
-    });
+    } as Partial<SubCategory>);
 
     // Load category relation
     subCategory.category = category;
@@ -275,9 +275,9 @@ export class CategoryService {
 async findAllSubCategories(queryDto: QuerySubCategoryDto) {
   const { search, categoryId } = queryDto;
 
-  const baseWhere = {
+  const baseWhere: any = {
     deletedAt: IsNull(),
-    ...(categoryId && { categoryId })
+    ...(categoryId && { category_id: categoryId })
   };
 
   // OR search using array
@@ -322,7 +322,7 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
     const queryBuilder = this.subCategoryRepository
       .createQueryBuilder('subCategory')
       .leftJoinAndSelect('subCategory.category', 'category', 'category.deletedAt IS NULL')
-      .where('subCategory.categoryId = :categoryId', { categoryId })
+      .where('subCategory.category_id = :categoryId', { categoryId })
       .andWhere('subCategory.deletedAt IS NULL');
 
     // Search functionality

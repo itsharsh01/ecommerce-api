@@ -4,10 +4,12 @@ import { S3Client, PutObjectCommand, PutObjectCommandInput } from '@aws-sdk/clie
 
 @Injectable()
 export class S3Service implements OnModuleInit {
-  private s3Client: S3Client;
+  private s3Client: S3Client | null = null;
   private bucketName: string;
   private region: string;
   private publicUrl: string;
+  private accessKeyId: string | undefined;
+  private secretAccessKey: string | undefined;
   private readonly logger = new Logger(S3Service.name);
 
   constructor(private configService: ConfigService) {
@@ -15,20 +17,21 @@ export class S3Service implements OnModuleInit {
     this.bucketName = this.configService.get<string>('AWS_S3_BUCKET') || 'elektwonik-backend';
     this.publicUrl = this.configService.get<string>('AWS_S3_PUBLIC_URL') || `https://${this.bucketName}.s3.${this.region}.amazonaws.com`;
 
-    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
-    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    this.accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    this.secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
 
-    if (!accessKeyId || !secretAccessKey) {
-      this.logger.warn('AWS credentials not configured. S3 uploads will fail.');
+    // Initialize S3Client only if credentials are available
+    if (this.accessKeyId && this.secretAccessKey) {
+      this.s3Client = new S3Client({
+        region: this.region,
+        credentials: {
+          accessKeyId: this.accessKeyId,
+          secretAccessKey: this.secretAccessKey,
+        },
+      });
+    } else {
+      this.logger.warn('AWS credentials not configured. S3 uploads will fail. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your .env file.');
     }
-
-    this.s3Client = new S3Client({
-      region: this.region,
-      credentials: {
-        accessKeyId: accessKeyId || '',
-        secretAccessKey: secretAccessKey || '',
-      },
-    });
   }
 
   async onModuleInit() {
@@ -40,6 +43,12 @@ export class S3Service implements OnModuleInit {
     fileBuffer: Buffer,
     contentType: string,
   ): Promise<string> {
+    if (!this.s3Client) {
+      const errorMessage = 'AWS credentials are required. Please configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your .env file.';
+      this.logger.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     try {
       const params: PutObjectCommandInput = {
         Bucket: this.bucketName,
