@@ -55,7 +55,7 @@ export class S3Service implements OnModuleInit {
         Key: objectKey,
         Body: fileBuffer,
         ContentType: contentType,
-        ACL: 'public-read', // Make file publicly accessible
+        // ACL: 'public-read', // Make file publicly accessible
       };
 
       await this.s3Client.send(new PutObjectCommand(params));
