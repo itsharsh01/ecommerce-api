@@ -31,14 +31,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Categories')
 @Controller('categories')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('access-token')
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   // ==================== CATEGORY ENDPOINTS ====================
 
   @Post()
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a new category' })
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createCategoryDto: CreateCategoryDto) {
@@ -51,7 +51,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -63,7 +65,12 @@ export class CategoryController {
       const result = await this.categoryService.findAll(queryDto);
 
       // Check if result has pagination (object with data and pagination keys)
-      if (result && typeof result === 'object' && 'data' in result && 'pagination' in result) {
+      if (
+        result &&
+        typeof result === 'object' &&
+        'data' in result &&
+        'pagination' in result
+      ) {
         return {
           msg: 'Categories retrieved successfully',
           data: result,
@@ -78,7 +85,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -91,7 +100,8 @@ export class CategoryController {
   @HttpCode(HttpStatus.CREATED)
   async createSubCategory(@Body() createSubCategoryDto: CreateSubCategoryDto) {
     try {
-      const result = await this.categoryService.createSubCategory(createSubCategoryDto);
+      const result =
+        await this.categoryService.createSubCategory(createSubCategoryDto);
       return {
         msg: 'Sub-category created successfully',
         data: result,
@@ -99,12 +109,17 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
   @Get('sub-categories')
-  @ApiOperation({ summary: 'Get all sub-categories (with search and optional categoryId filter)' })
+  @ApiOperation({
+    summary:
+      'Get all sub-categories (with search and optional categoryId filter)',
+  })
   @HttpCode(HttpStatus.OK)
   async findAllSubCategories(@Query() queryDto: QuerySubCategoryDto) {
     try {
@@ -116,7 +131,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -144,7 +161,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -168,7 +187,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -195,7 +216,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -219,7 +242,9 @@ export class CategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 }
@@ -247,7 +272,9 @@ export class SubCategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -266,7 +293,10 @@ export class SubCategoryController {
     @Body() updateSubCategoryDto: UpdateSubCategoryDto,
   ) {
     try {
-      const result = await this.categoryService.updateSubCategory(id, updateSubCategoryDto);
+      const result = await this.categoryService.updateSubCategory(
+        id,
+        updateSubCategoryDto,
+      );
       return {
         msg: 'Sub-category updated successfully',
         data: result,
@@ -274,7 +304,9 @@ export class SubCategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 
@@ -298,7 +330,9 @@ export class SubCategoryController {
     } catch (err) {
       console.log('err', err);
       if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(err.message || 'Something went wrong');
+      throw new InternalServerErrorException(
+        err.message || 'Something went wrong',
+      );
     }
   }
 }

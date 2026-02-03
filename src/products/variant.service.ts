@@ -13,7 +13,6 @@ import { ProductVariant } from '../entities/product-variant.entity';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ImageService } from '../images/image.service';
-import { ModuleType } from '../entities/image.entity';
 import { Image } from '../entities/image.entity';
 
 @Injectable()

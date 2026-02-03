@@ -107,13 +107,10 @@ export class CategoryService {
   async findAll(queryDto: QueryCategoryDto) {
     const { page, limit, search } = queryDto;
 
-
     // Build query builder for complex conditions
     const queryBuilder = this.categoryRepository
       .createQueryBuilder('category')
       .where('category.deletedAt IS NULL'); // Exclude soft-deleted records
-
-
 
     // Search functionality
     if (search) {
@@ -165,8 +162,7 @@ export class CategoryService {
     if (!category) {
       throw new NotFoundException('Category not found');
     }
-      return  category
-
+    return category;
   }
 
   async update(id: string, updateCategoryDto: UpdateCategoryDto) {
@@ -272,34 +268,32 @@ export class CategoryService {
     return subCategory;
   }
 
-async findAllSubCategories(queryDto: QuerySubCategoryDto) {
-  const { search, categoryId } = queryDto;
+  async findAllSubCategories(queryDto: QuerySubCategoryDto) {
+    const { search, categoryId } = queryDto;
 
-  const baseWhere: any = {
-    deletedAt: IsNull(),
-    ...(categoryId && { category_id: categoryId })
-  };
+    const baseWhere: any = {
+      deletedAt: IsNull(),
+      ...(categoryId && { category_id: categoryId }),
+    };
 
-  // OR search using array
-  const where = search
-    ? [
-        { ...baseWhere, name: ILike(`%${search}%`) },
-        { ...baseWhere, slug: ILike(`%${search}%`) },
-      ]
-    : baseWhere;
+    // OR search using array
+    const where = search
+      ? [
+          { ...baseWhere, name: ILike(`%${search}%`) },
+          { ...baseWhere, slug: ILike(`%${search}%`) },
+        ]
+      : baseWhere;
 
-  return await this.subCategoryRepository.find({
-    where,
-    relations: {
-      category: true,
-    },
-    order: {
-      createdAt: 'DESC',
-    },
-  });
-}
-
-
+    return await this.subCategoryRepository.find({
+      where,
+      relations: {
+        category: true,
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
 
   async findSubCategoriesByCategory(
     categoryId: string,
@@ -321,7 +315,11 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
     // Build query builder
     const queryBuilder = this.subCategoryRepository
       .createQueryBuilder('subCategory')
-      .leftJoinAndSelect('subCategory.category', 'category', 'category.deletedAt IS NULL')
+      .leftJoinAndSelect(
+        'subCategory.category',
+        'category',
+        'category.deletedAt IS NULL',
+      )
       .where('subCategory.category_id = :categoryId', { categoryId })
       .andWhere('subCategory.deletedAt IS NULL');
 
@@ -351,7 +349,10 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
     return subCategory;
   }
 
-  async updateSubCategory(id: string, updateSubCategoryDto: UpdateSubCategoryDto) {
+  async updateSubCategory(
+    id: string,
+    updateSubCategoryDto: UpdateSubCategoryDto,
+  ) {
     const subCategory = await this.subCategoryRepository.findOne({
       where: { id },
     });
@@ -383,7 +384,8 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
 
       // Check if new slug conflicts with existing in the same category
       if (newSlug !== subCategory.slug) {
-        const categoryId = updateSubCategoryDto.category_id || subCategory.category_id;
+        const categoryId =
+          updateSubCategoryDto.category_id || subCategory.category_id;
         const existing = await this.subCategoryRepository.findOne({
           where: { slug: newSlug, category_id: categoryId },
           withDeleted: true,
@@ -408,7 +410,8 @@ async findAllSubCategories(queryDto: QuerySubCategoryDto) {
       subCategory.isActive = updateSubCategoryDto.isActive;
     }
 
-    const updatedSubCategory = await this.subCategoryRepository.save(subCategory);
+    const updatedSubCategory =
+      await this.subCategoryRepository.save(subCategory);
 
     // Load category relation
     const category = await this.categoryRepository.findOne({

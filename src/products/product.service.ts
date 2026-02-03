@@ -7,7 +7,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository, ILike, MoreThanOrEqual, LessThanOrEqual, DataSource } from 'typeorm';
+import { IsNull, Repository, DataSource } from 'typeorm';
 import { Product, ProductStatus } from '../entities/product.entity';
 import { ProductVariant } from '../entities/product-variant.entity';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -109,7 +109,7 @@ export class ProductService {
     }
   }
 
-async findAll(queryDto: QueryProductDto, isAdmin = false) {
+  async findAll(queryDto: QueryProductDto, isAdmin = false) {
     const page = Number(queryDto.page) || 1;
     const limit = Number(queryDto.limit) || 10;
     const skip = (page - 1) * limit;
@@ -120,10 +120,12 @@ async findAll(queryDto: QueryProductDto, isAdmin = false) {
     const baseQB = this.productRepository
       .createQueryBuilder('product')
       .where('product.deletedAt IS NULL');
+    console.log('====isAdmin=====', isAdmin);
 
     if (!isAdmin) {
       baseQB.andWhere('product.status = :status', {
-        status: ProductStatus.ACTIVE,
+        // status: ProductStatus.ACTIVE,
+        status: ProductStatus.DRAFT,
       });
     }
 
@@ -286,35 +288,30 @@ async findAll(queryDto: QueryProductDto, isAdmin = false) {
         hasPreviousPage: page > 1,
       },
     };
-
-}
-
+  }
 
   async findOne(id: string) {
-    try {
-      const product = await this.productRepository.findOne({
-        where: { id, deletedAt: IsNull() },
-        relations: ['variants', 'brand', 'subCategory'],
-      });
+    const product = await this.productRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: ['variants', 'brand', 'subCategory'],
+    });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
 
-      // Filter out deleted variants
-      const activeVariants = product.variants?.filter(
-        (v) => !v.deletedAt,
-      ) || [];
+    // Filter out deleted variants
+    const activeVariants = product.variants?.filter((v) => !v.deletedAt) || [];
 
-      // Get default variant (variant with isDefault=true, or first active variant)
-      const defaultVariant =
-        activeVariants.find((v) => v.isDefault && v.isActive) ||
-        activeVariants.find((v) => v.isActive) ||
-        activeVariants[0];
+    // Get default variant (variant with isDefault=true, or first active variant)
+    const defaultVariant =
+      activeVariants.find((v) => v.isDefault && v.isActive) ||
+      activeVariants.find((v) => v.isActive) ||
+      activeVariants[0];
 
-      // Fetch all images in one query
-      const variantIds = activeVariants.map((v) => v.id);
-      const imagesQuery = `
+    // Fetch all images in one query
+    const variantIds = activeVariants.map((v) => v.id);
+    const imagesQuery = `
         SELECT
           id, url, "moduleType", "module_id", type
         FROM images
@@ -327,57 +324,51 @@ async findAll(queryDto: QueryProductDto, isAdmin = false) {
           AND "deletedAt" IS NULL
         ORDER BY "createdAt" ASC
       `;
-      const images = await this.dataSource.query(imagesQuery, [id, variantIds]);
+    const images = await this.dataSource.query(imagesQuery, [id, variantIds]);
 
-      // Organize images by module_id and type
-      const productImages: any[] = [];
-      const variantImagesMap = new Map<string, any[]>();
+    // Organize images by module_id and type
+    const productImages: any[] = [];
+    const variantImagesMap = new Map<string, any[]>();
 
-      images.forEach((img: any) => {
-        if (img.moduleType === 'product') {
-          productImages.push({
-            id: img.id,
-            url: img.url,
-            type: img.type,
-          });
-        } else if (img.moduleType === 'variant') {
-          if (!variantImagesMap.has(img.module_id)) {
-            variantImagesMap.set(img.module_id, []);
-          }
-          variantImagesMap.get(img.module_id)!.push({
-            id: img.id,
-            url: img.url,
-            type: img.type,
-          });
+    images.forEach((img: any) => {
+      if (img.moduleType === 'product') {
+        productImages.push({
+          id: img.id,
+          url: img.url,
+          type: img.type,
+        });
+      } else if (img.moduleType === 'variant') {
+        if (!variantImagesMap.has(img.module_id)) {
+          variantImagesMap.set(img.module_id, []);
         }
-      });
+        variantImagesMap.get(img.module_id)!.push({
+          id: img.id,
+          url: img.url,
+          type: img.type,
+        });
+      }
+    });
 
-      // Map variants with images
-      const variantsWithImages = activeVariants.map((variant) => ({
-        ...variant,
-        images: variantImagesMap.get(variant.id) || [],
-      }));
+    // Map variants with images
+    const variantsWithImages = activeVariants.map((variant) => ({
+      ...variant,
+      images: variantImagesMap.get(variant.id) || [],
+    }));
 
-      // Get default variant with images
-      const defaultVariantWithImages = defaultVariant
-        ? {
-            ...defaultVariant,
-            images: variantImagesMap.get(defaultVariant.id) || [],
-          }
-        : null;
+    // Get default variant with images
+    const defaultVariantWithImages = defaultVariant
+      ? {
+          ...defaultVariant,
+          images: variantImagesMap.get(defaultVariant.id) || [],
+        }
+      : null;
 
-      return {
-        ...product,
-        images: productImages,
-        defaultVariant: defaultVariantWithImages,
-        variants: variantsWithImages,
-      };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to fetch product',
-      );
-    }
+    return {
+      ...product,
+      images: productImages,
+      defaultVariant: defaultVariantWithImages,
+      variants: variantsWithImages,
+    };
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
@@ -450,7 +441,9 @@ async findAll(queryDto: QueryProductDto, isAdmin = false) {
       const updatedProduct = await this.productRepository.save(product);
 
       if (!updatedProduct) {
-        throw new InternalServerErrorException('Failed to update product status');
+        throw new InternalServerErrorException(
+          'Failed to update product status',
+        );
       }
 
       return updatedProduct;
