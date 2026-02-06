@@ -2,10 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/utils/interceptor/response.interceptor';
+import { RequestLoggerInterceptor } from './common/utils/logger/request-logger.interceptor';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+  });
   const allowedOrigins = [
   'http://localhost:5000',
   'http://localhost:5001',
@@ -35,7 +38,10 @@ app.enableCors({
       transform: true,
     }),
   );
-     app.useGlobalInterceptors(new ResponseInterceptor());
+     app.useGlobalInterceptors(
+       new RequestLoggerInterceptor(),
+       new ResponseInterceptor(),
+     );
 
      // Swagger configuration
   const config = new DocumentBuilder()
