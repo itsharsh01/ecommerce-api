@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository, DataSource } from 'typeorm';
 import { Product, ProductStatus } from '../entities/product.entity';
 import { ProductVariant } from '../entities/product-variant.entity';
+import { ProductReview } from '../entities/product-review.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
@@ -24,6 +25,8 @@ export class ProductService {
     private productRepository: Repository<Product>,
     @InjectRepository(ProductVariant)
     private variantRepository: Repository<ProductVariant>,
+    @InjectRepository(ProductReview)
+    private reviewRepository: Repository<ProductReview>,
     private imageService: ImageService,
     private dataSource: DataSource,
   ) {}
@@ -68,45 +71,38 @@ export class ProductService {
   }
 
   async create(createProductDto: CreateProductDto, userId: string) {
-    try {
-      // Generate slug
-      const baseSlug = this.generateSlug(createProductDto.name);
-      const slug = await this.generateUniqueSlug(baseSlug);
+    // Generate slug
+    const baseSlug = this.generateSlug(createProductDto.name);
+    const slug = await this.generateUniqueSlug(baseSlug);
 
-      // Check if name already exists
-      const existingName = await this.productRepository.findOne({
-        where: { name: createProductDto.name },
-        withDeleted: true,
-      });
+    // Check if name already exists
+    const existingName = await this.productRepository.findOne({
+      where: { name: createProductDto.name },
+      withDeleted: true,
+    });
 
-      if (existingName) {
-        throw new ConflictException('Product with this name already exists');
-      }
-
-      const product = this.productRepository.create({
-        name: createProductDto.name,
-        slug,
-        description: createProductDto.description,
-        brand_id: createProductDto.brandId,
-        sub_category_id: createProductDto.subCategoryId,
-        status: ProductStatus.DRAFT,
-        createdBy: userId,
-        seller_id: userId, // Set seller_id to the user creating the product
-      });
-
-      const savedProduct = await this.productRepository.save(product);
-
-      if (!savedProduct) {
-        throw new InternalServerErrorException('Failed to create product');
-      }
-
-      return savedProduct;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to create product',
-      );
+    if (existingName) {
+      throw new ConflictException('Product with this name already exists');
     }
+
+    const product = this.productRepository.create({
+      name: createProductDto.name,
+      slug,
+      description: createProductDto.description,
+      brand_id: createProductDto.brandId,
+      sub_category_id: createProductDto.subCategoryId,
+      status: ProductStatus.DRAFT,
+      createdBy: userId,
+      seller_id: userId,
+    });
+
+    const savedProduct = await this.productRepository.save(product);
+
+    if (!savedProduct) {
+      throw new InternalServerErrorException('Failed to create product');
+    }
+
+    return savedProduct;
   }
 
   async findAll(queryDto: QueryProductDto, isAdmin = false) {
@@ -120,7 +116,6 @@ export class ProductService {
     const baseQB = this.productRepository
       .createQueryBuilder('product')
       .where('product.deletedAt IS NULL');
-    console.log('====isAdmin=====', isAdmin);
 
     if (!isAdmin) {
       baseQB.andWhere('product.status = :status', {
@@ -363,116 +358,161 @@ export class ProductService {
         }
       : null;
 
+    // Fetch reviews with images
+    const reviews = await this.reviewRepository.find({
+      where: {
+        product_id: id,
+        isActive: true,
+        deletedAt: IsNull(),
+      },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+      take: 50, // Limit to 50 most recent reviews
+    });
+
+    // Batch fetch review images
+    let reviewsWithImages: any[] = [];
+    if (reviews.length > 0) {
+      const reviewIds = reviews.map((r) => r.id);
+      const reviewImages = await this.dataSource.query(
+        `
+        SELECT id, url, "moduleType", "module_id", type
+        FROM images
+        WHERE
+          "moduleType" = $1
+          AND "module_id" = ANY($2::uuid[])
+          AND type = $3
+          AND "deletedAt" IS NULL
+        ORDER BY "createdAt" ASC
+      `,
+        [ModuleType.PRODUCT_REVIEW, reviewIds, ImageType.GALLERY],
+      );
+
+      // Organize images by review_id
+      const reviewImagesMap = new Map<string, any[]>();
+      reviewImages.forEach((img: any) => {
+        if (!reviewImagesMap.has(img.module_id)) {
+          reviewImagesMap.set(img.module_id, []);
+        }
+        reviewImagesMap.get(img.module_id)!.push({
+          id: img.id,
+          url: img.url,
+          type: img.type,
+        });
+      });
+
+      // Map reviews with images
+      reviewsWithImages = reviews.map((review) => ({
+        id: review.id,
+        product_id: review.product_id,
+        user_id: review.user_id,
+        rating: review.rating,
+        title: review.title,
+        comment: review.comment,
+        isVerifiedPurchase: review.isVerifiedPurchase,
+        isActive: review.isActive,
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+        user: review.user
+          ? {
+              id: review.user.id,
+              firstName: review.user.firstName,
+              lastName: review.user.lastName,
+              email: review.user.email,
+            }
+          : null,
+        images: reviewImagesMap.get(review.id) || [],
+      }));
+    }
+
     return {
       ...product,
       images: productImages,
       defaultVariant: defaultVariantWithImages,
       variants: variantsWithImages,
+      reviews: reviewsWithImages,
     };
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
-    try {
-      const product = await this.productRepository.findOne({
-        where: { id, deletedAt: IsNull() },
+    const product = await this.productRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // If name is being updated, regenerate slug
+    if (updateProductDto.name && updateProductDto.name !== product.name) {
+      const baseSlug = this.generateSlug(updateProductDto.name);
+      product.slug = await this.generateUniqueSlug(baseSlug, id);
+
+      // Check if new name already exists
+      const existingName = await this.productRepository.findOne({
+        where: { name: updateProductDto.name },
+        withDeleted: true,
       });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
+      if (existingName && existingName.id !== id) {
+        throw new ConflictException('Product with this name already exists');
       }
-
-      // If name is being updated, regenerate slug
-      if (updateProductDto.name && updateProductDto.name !== product.name) {
-        const baseSlug = this.generateSlug(updateProductDto.name);
-        product.slug = await this.generateUniqueSlug(baseSlug, id);
-
-        // Check if new name already exists
-        const existingName = await this.productRepository.findOne({
-          where: { name: updateProductDto.name },
-          withDeleted: true,
-        });
-
-        if (existingName && existingName.id !== id) {
-          throw new ConflictException('Product with this name already exists');
-        }
-      }
-
-      // Update fields - map camelCase DTO to snake_case entity properties
-      if (updateProductDto.name !== undefined) {
-        product.name = updateProductDto.name;
-      }
-      if (updateProductDto.description !== undefined) {
-        product.description = updateProductDto.description;
-      }
-      if (updateProductDto.brandId !== undefined) {
-        product.brand_id = updateProductDto.brandId;
-      }
-      if (updateProductDto.subCategoryId !== undefined) {
-        product.sub_category_id = updateProductDto.subCategoryId;
-      }
-
-      const updatedProduct = await this.productRepository.save(product);
-
-      if (!updatedProduct) {
-        throw new InternalServerErrorException('Failed to update product');
-      }
-
-      return updatedProduct;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to update product',
-      );
     }
+
+    // Update fields - map camelCase DTO to snake_case entity properties
+    if (updateProductDto.name !== undefined) {
+      product.name = updateProductDto.name;
+    }
+    if (updateProductDto.description !== undefined) {
+      product.description = updateProductDto.description;
+    }
+    if (updateProductDto.brandId !== undefined) {
+      product.brand_id = updateProductDto.brandId;
+    }
+    if (updateProductDto.subCategoryId !== undefined) {
+      product.sub_category_id = updateProductDto.subCategoryId;
+    }
+
+    const updatedProduct = await this.productRepository.save(product);
+
+    if (!updatedProduct) {
+      throw new InternalServerErrorException('Failed to update product');
+    }
+
+    return updatedProduct;
   }
 
   async updateStatus(id: string, updateStatusDto: UpdateProductStatusDto) {
-    try {
-      const product = await this.productRepository.findOne({
-        where: { id, deletedAt: IsNull() },
-      });
+    const product = await this.productRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
-
-      product.status = updateStatusDto.status;
-
-      const updatedProduct = await this.productRepository.save(product);
-
-      if (!updatedProduct) {
-        throw new InternalServerErrorException(
-          'Failed to update product status',
-        );
-      }
-
-      return updatedProduct;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to update product status',
-      );
+    if (!product) {
+      throw new NotFoundException('Product not found');
     }
+
+    product.status = updateStatusDto.status;
+
+    const updatedProduct = await this.productRepository.save(product);
+
+    if (!updatedProduct) {
+      throw new InternalServerErrorException('Failed to update product status');
+    }
+
+    return updatedProduct;
   }
 
   async remove(id: string) {
-    try {
-      const product = await this.productRepository.findOne({
-        where: { id, deletedAt: IsNull() },
-      });
+    const product = await this.productRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
-
-      await this.productRepository.softDelete(id);
-
-      return { message: 'Product deleted successfully' };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to delete product',
-      );
+    if (!product) {
+      throw new NotFoundException('Product not found');
     }
+
+    await this.productRepository.softDelete(id);
+
+    return { message: 'Product deleted successfully' };
   }
 }

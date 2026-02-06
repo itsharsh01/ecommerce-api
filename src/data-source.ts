@@ -12,6 +12,7 @@ import { ProductVariant } from './entities/product-variant.entity';
 import { Section } from './entities/section.entity';
 import { SectionItem } from './entities/section-item.entity';
 import { Image } from './entities/image.entity';
+import { ProductReview } from './entities/product-review.entity';
 // import { Order } from './entities/order.entity';
 
 // Load environment variables
@@ -33,6 +34,7 @@ export default new DataSource({
     Section,
     SectionItem,
     Image,
+    ProductReview,
     // Order,
   ],
   migrations: [path.join(__dirname, 'migrations', '*.{ts,js}')],

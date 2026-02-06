@@ -72,7 +72,6 @@ export class VariantController {
         data: result,
       };
     } catch (err) {
-      console.log('err', err);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(err.message || 'Something went wrong');
     }
@@ -94,7 +93,6 @@ export class VariantController {
         data: result,
       };
     } catch (err) {
-      console.log('err', err);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(err.message || 'Something went wrong');
     }
@@ -121,7 +119,6 @@ export class VariantController {
         data: result,
       };
     } catch (err) {
-      console.log('err', err);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(err.message || 'Something went wrong');
     }
@@ -145,7 +142,6 @@ export class VariantController {
         data: result,
       };
     } catch (err) {
-      console.log('err', err);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(err.message || 'Something went wrong');
     }
@@ -169,7 +165,6 @@ export class VariantController {
         data: result,
       };
     } catch (err) {
-      console.log('err', err);
       if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(err.message || 'Something went wrong');
     }

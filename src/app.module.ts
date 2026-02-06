@@ -8,6 +8,7 @@ import { BrandModule } from './brands/brand.module';
 import { ProductModule } from './products/product.module';
 import { SectionModule } from './sections/section.module';
 import { ImageModule } from './images/image.module';
+import { ProductReviewModule } from './product-reviews/product-review.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
@@ -64,6 +65,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
     ProductModule,
     SectionModule,
     ImageModule,
+    ProductReviewModule,
   ],
   controllers: [AppController],
   providers: [AppService],

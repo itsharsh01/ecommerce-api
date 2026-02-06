@@ -14,6 +14,7 @@ export { ProductVariant } from './product-variant.entity';
 export { Section } from './section.entity';
 export { SectionItem } from './section-item.entity';
 export { Image } from './image.entity';
+export { ProductReview } from './product-review.entity';
 
 // Add new entities here as you create them:
 // export { Order } from './order.entity';

@@ -2,21 +2,16 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ProductService } from './product.service';
-import { VariantService } from './variant.service';
-import { ProductController } from './product.controller';
-import { VariantController } from './variant.controller';
-import { Product } from '../entities/product.entity';
-import { ProductVariant } from '../entities/product-variant.entity';
+import { ProductReviewService } from './product-review.service';
+import { ProductReviewController } from './product-review.controller';
 import { ProductReview } from '../entities/product-review.entity';
+import { Product } from '../entities/product.entity';
 import { ImageModule } from '../images/image.module';
-import { ProductReviewModule } from '../product-reviews/product-review.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, ProductVariant, ProductReview]),
+    TypeOrmModule.forFeature([ProductReview, Product]),
     ImageModule, // Import ImageModule to use ImageService
-    ProductReviewModule, // Import ProductReviewModule to use ProductReviewService
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -30,9 +25,10 @@ import { ProductReviewModule } from '../product-reviews/product-review.module';
       }),
       inject: [ConfigService],
     }),
+    ConfigModule,
   ],
-  controllers: [ProductController, VariantController],
-  providers: [ProductService, VariantService],
-  exports: [ProductService, VariantService],
+  controllers: [ProductReviewController],
+  providers: [ProductReviewService],
+  exports: [ProductReviewService],
 })
-export class ProductModule {}
+export class ProductReviewModule {}

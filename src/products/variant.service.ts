@@ -27,69 +27,55 @@ export class VariantService {
   ) {}
 
   async create(productId: string, createVariantDto: CreateVariantDto) {
-    try {
-      // Check if product exists and is not deleted
-      const product = await this.productRepository.findOne({
-        where: { id: productId, deletedAt: IsNull() },
-      });
+    // Check if product exists and is not deleted
+    const product = await this.productRepository.findOne({
+      where: { id: productId, deletedAt: IsNull() },
+    });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
-
-      // Check if SKU already exists
-      const existingSku = await this.variantRepository.findOne({
-        where: { sku: createVariantDto.sku },
-        withDeleted: true,
-      });
-
-      if (existingSku) {
-        throw new ConflictException('Variant with this SKU already exists');
-      }
-
-      const variant = this.variantRepository.create({
-        product_id: productId,
-        sku: createVariantDto.sku,
-        attributes: createVariantDto.attributes || {},
-        price: createVariantDto.price,
-        mrp: createVariantDto.mrp,
-        stock: createVariantDto.stock ?? 0,
-        isActive: createVariantDto.isActive ?? true,
-      });
-
-      const savedVariant = await this.variantRepository.save(variant);
-
-      if (!savedVariant) {
-        throw new InternalServerErrorException('Failed to create variant');
-      }
-
-      return savedVariant;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to create variant',
-      );
+    if (!product) {
+      throw new NotFoundException('Product not found');
     }
+
+    // Check if SKU already exists
+    const existingSku = await this.variantRepository.findOne({
+      where: { sku: createVariantDto.sku },
+      withDeleted: true,
+    });
+
+    if (existingSku) {
+      throw new ConflictException('Variant with this SKU already exists');
+    }
+
+    const variant = this.variantRepository.create({
+      product_id: productId,
+      sku: createVariantDto.sku,
+      attributes: createVariantDto.attributes || {},
+      price: createVariantDto.price,
+      mrp: createVariantDto.mrp,
+      stock: createVariantDto.stock ?? 0,
+      isActive: createVariantDto.isActive ?? true,
+    });
+
+    const savedVariant = await this.variantRepository.save(variant);
+
+    if (!savedVariant) {
+      throw new InternalServerErrorException('Failed to create variant');
+    }
+
+    return savedVariant;
   }
 
   async findOne(id: string) {
-    try {
-      const variant = await this.variantRepository.findOne({
-        where: { id, deletedAt: IsNull() },
-        relations: ['product'],
-      });
+    const variant = await this.variantRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+      relations: ['product'],
+    });
 
-      if (!variant) {
-        throw new NotFoundException('Variant not found');
-      }
-
-      return variant;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to fetch variant',
-      );
+    if (!variant) {
+      throw new NotFoundException('Variant not found');
     }
+
+    return variant;
   }
 
   /**
@@ -245,58 +231,50 @@ async findVariantDetailWithProduct(variantId: string) {
 
 
   async update(id: string, updateVariantDto: UpdateVariantDto) {
+    const variant = await this.variantRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
 
-      const variant = await this.variantRepository.findOne({
-        where: { id, deletedAt: IsNull() },
+    if (!variant) {
+      throw new NotFoundException('Variant not found');
+    }
+
+    // If SKU is being updated, check for conflicts
+    if (updateVariantDto.sku && updateVariantDto.sku !== variant.sku) {
+      const existingSku = await this.variantRepository.findOne({
+        where: { sku: updateVariantDto.sku },
+        withDeleted: true,
       });
 
-      if (!variant) {
-        throw new NotFoundException('Variant not found');
+      if (existingSku && existingSku.id !== id) {
+        throw new ConflictException('Variant with this SKU already exists');
       }
+    }
 
-      // If SKU is being updated, check for conflicts
-      if (updateVariantDto.sku && updateVariantDto.sku !== variant.sku) {
-        const existingSku = await this.variantRepository.findOne({
-          where: { sku: updateVariantDto.sku },
-          withDeleted: true,
-        });
+    // Update fields
+    Object.assign(variant, updateVariantDto);
 
-        if (existingSku && existingSku.id !== id) {
-          throw new ConflictException('Variant with this SKU already exists');
-        }
-      }
+    const updatedVariant = await this.variantRepository.save(variant);
 
-      // Update fields
-      Object.assign(variant, updateVariantDto);
+    if (!updatedVariant) {
+      throw new InternalServerErrorException('Failed to update variant');
+    }
 
-      const updatedVariant = await this.variantRepository.save(variant);
-
-      if (!updatedVariant) {
-        throw new InternalServerErrorException('Failed to update variant');
-      }
-
-      return updatedVariant;
+    return updatedVariant;
   }
 
   async remove(id: string) {
-    try {
-      const variant = await this.variantRepository.findOne({
-        where: { id, deletedAt: IsNull() },
-      });
+    const variant = await this.variantRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
 
-      if (!variant) {
-        throw new NotFoundException('Variant not found');
-      }
-
-      await this.variantRepository.softDelete(id);
-
-      return { message: 'Variant deleted successfully' };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to delete variant',
-      );
+    if (!variant) {
+      throw new NotFoundException('Variant not found');
     }
+
+    await this.variantRepository.softDelete(id);
+
+    return { message: 'Variant deleted successfully' };
   }
 
   /**
@@ -401,52 +379,45 @@ async findVariantDetailWithProduct(variantId: string) {
    * Ensures only one variant per product has isDefault=true
    */
   async setAsDefault(variantId: string) {
-    try {
-      const variant = await this.variantRepository.findOne({
-        where: { id: variantId, deletedAt: IsNull() },
-        relations: ['product'],
-      });
+    const variant = await this.variantRepository.findOne({
+      where: { id: variantId, deletedAt: IsNull() },
+      relations: ['product'],
+    });
 
-      if (!variant) {
-        throw new NotFoundException('Variant not found');
-      }
-
-      // Check if product exists
-      const product = await this.productRepository.findOne({
-        where: { id: variant.product_id, deletedAt: IsNull() },
-      });
-
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
-
-      // Use transaction to ensure atomicity
-      await this.dataSource.transaction(async (manager) => {
-        // Set all other variants of this product to isDefault=false
-        await manager.update(
-          ProductVariant,
-          {
-            product_id: variant.product_id,
-            deletedAt: IsNull(),
-          },
-          { isDefault: false },
-        );
-
-        // Set this variant as default
-        await manager.update(ProductVariant, variantId, { isDefault: true });
-      });
-
-      // Fetch updated variant
-      const updatedVariant = await this.variantRepository.findOne({
-        where: { id: variantId },
-      });
-
-      return updatedVariant;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      throw new InternalServerErrorException(
-        err.message || 'Failed to set variant as default',
-      );
+    if (!variant) {
+      throw new NotFoundException('Variant not found');
     }
+
+    // Check if product exists
+    const product = await this.productRepository.findOne({
+      where: { id: variant.product_id, deletedAt: IsNull() },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Use transaction to ensure atomicity
+    await this.dataSource.transaction(async (manager) => {
+      // Set all other variants of this product to isDefault=false
+      await manager.update(
+        ProductVariant,
+        {
+          product_id: variant.product_id,
+          deletedAt: IsNull(),
+        },
+        { isDefault: false },
+      );
+
+      // Set this variant as default
+      await manager.update(ProductVariant, variantId, { isDefault: true });
+    });
+
+    // Fetch updated variant
+    const updatedVariant = await this.variantRepository.findOne({
+      where: { id: variantId },
+    });
+
+    return updatedVariant;
   }
 }
