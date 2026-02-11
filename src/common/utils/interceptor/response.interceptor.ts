@@ -11,8 +11,17 @@ export class ResponseInterceptor implements NestInterceptor {
           return data;
         }
 
-        const hasMsg = typeof data?.msg === 'string';
-        const hasData = 'data' in data;
+        const isObject = data !== null && typeof data === 'object' && !Array.isArray(data);
+        const hasMsg = isObject && typeof data?.msg === 'string';
+        const hasData = isObject && 'data' in data;
+
+        if (!isObject) {
+          return {
+            success: true,
+            msg: 'Operation successful',
+            data: data,
+          };
+        }
 
         return {
           success: true,
